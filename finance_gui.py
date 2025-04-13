@@ -1,17 +1,13 @@
+
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
-from tkinter import Tk, filedialog, Button, Label
-import tkinter as tk
+import streamlit as st
 
-def load_and_process_data():
-    file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
-    
-    if not file_path:
-        return
-    
-    df = pd.read_csv(r"C:\Users\Administrator\Desktop\class work\finance_economics_dataset.csv")
+def load_and_process_data(uploaded_file):
+    df = pd.read_csv(uploaded_file)
     
     # Cleaning
     df = df.drop_duplicates()
@@ -29,15 +25,9 @@ def load_and_process_data():
     df_scaled = df.copy()
     df_scaled[numeric_cols] = scaler.fit_transform(df[numeric_cols])
 
-    # Store for plotting
-    app_state['df'] = df
-    app_state['df_scaled'] = df_scaled
-    label_status.config(text="✅ Data loaded and processed!")
+    return df, df_scaled
 
-def plot_line_chart():
-    if 'df' not in app_state:
-        return
-    df = app_state['df']
+def plot_line_chart(df):
     plt.figure(figsize=(12, 6))
     sns.lineplot(data=df, x='Date', y='Close Price', hue='Stock Index')
     plt.title('Stock Index Close Prices Over Time')
@@ -45,41 +35,36 @@ def plot_line_chart():
     plt.ylabel('Close Price')
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.show()
+    st.pyplot(plt)
 
-def plot_heatmap():
-    if 'df_scaled' not in app_state:
-        return
-    df_scaled = app_state['df_scaled']
-    numeric_cols = df_scaled.select_dtypes(include=['float64', 'int64']).columns
+def plot_heatmap(df_scaled):
     plt.figure(figsize=(14, 10))
+    numeric_cols = df_scaled.select_dtypes(include=['float64', 'int64']).columns
     sns.heatmap(df_scaled[numeric_cols].corr(), cmap='coolwarm', annot=False)
     plt.title('Correlation Heatmap (Normalized Features)')
     plt.tight_layout()
-    plt.show()
+    st.pyplot(plt)
 
-# App state to store data between functions
-app_state = {}
+# Streamlit App Layout
+st.title("📊 Finance Dashboard")
+st.sidebar.header("Upload Your CSV Data")
 
-# GUI Setup
-root = Tk()
-root.title("Finance & Economics GUI")
-root.geometry("400x250")
+# File Upload
+uploaded_file = st.sidebar.file_uploader("Choose a CSV file", type="csv")
 
-label_title = Label(root, text="📊 Finance Dashboard", font=("Arial", 16))
-label_title.pack(pady=10)
+if uploaded_file is not None:
+    # Process the file and display status
+    df, df_scaled = load_and_process_data(uploaded_file)
+    st.success("Data loaded and processed successfully!")
 
-btn_load = Button(root, text="Load CSV and Process", command=load_and_process_data, width=25)
-btn_load.pack(pady=10)
+    # Option to plot charts
+    plot_option = st.sidebar.selectbox("Choose a plot", ["Select", "Line Chart", "Correlation Heatmap"])
 
-btn_line = Button(root, text="Plot Close Price Line Chart", command=plot_line_chart, width=25)
-btn_line.pack(pady=10)
+    if plot_option == "Line Chart":
+        plot_line_chart(df)
 
-btn_heat = Button(root, text="Plot Correlation Heatmap", command=plot_heatmap, width=25)
-btn_heat.pack(pady=10)
-
-label_status = Label(root, text="", fg="green")
-label_status.pack(pady=10)
-
-root.mainloop()
+    elif plot_option == "Correlation Heatmap":
+        plot_heatmap(df_scaled)
+else:
+    st.warning("Please upload a CSV file to get started.")
 
