@@ -11,7 +11,7 @@ def load_and_process_data():
     if not file_path:
         return
     
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(r"C:\Users\Administrator\Desktop\class work\finance_economics_dataset.csv")
     
     # Cleaning
     df = df.drop_duplicates()
