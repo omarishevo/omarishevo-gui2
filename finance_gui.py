@@ -6,7 +6,7 @@ import streamlit as st
 @st.cache_data
 def load_and_process_data(uploaded_file):
     # Load and preprocess the data
-    df = pd.read_csv(uploaded_file)
+    df = pd.read_csv(r"C:\Users\Administrator\Desktop\class work\finance_economics_dataset.csv")
 
     # Cleaning
     df = df.drop_duplicates()
