@@ -2,8 +2,8 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import streamlit as st
 
-# Cache the function to optimize performance
-@st.cache_data
+# Use @st.cache to cache the function to optimize performance
+@st.cache
 def load_and_process_data(uploaded_file):
     # Load CSV file
     df = pd.read_csv(uploaded_file)
