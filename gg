@@ -1,2 +1,0 @@
-# Load and preprocess the data
-@st.cache_data
