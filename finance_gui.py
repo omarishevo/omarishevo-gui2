@@ -3,8 +3,6 @@ from sklearn.preprocessing import StandardScaler
 import streamlit as st
 
 def load_and_process_data(uploaded_file):
-    # Load and preprocess the data
-@st.cache_data
     df = pd.read_csv(uploaded_file)
 
     # Cleaning
