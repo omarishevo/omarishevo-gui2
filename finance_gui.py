@@ -2,10 +2,10 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import streamlit as st
 
-# Use @st.cache to cache the function to optimize performance
-@st.cache
+# Use @st.cache_data to cache the function to optimize performance (for Streamlit >=1.0)
+@st.cache_data
 def load_and_process_data(uploaded_file):
-    # Load CSV file
+    # Load CSV file directly from uploaded_file
     df = pd.read_csv(uploaded_file)
 
     # Basic Cleaning
@@ -40,6 +40,7 @@ uploaded_file = st.sidebar.file_uploader("📂 Upload a CSV file", type="csv")
 
 if uploaded_file is not None:
     try:
+        # Load and process the uploaded data
         df, df_scaled = load_and_process_data(uploaded_file)
         st.success("✅ Dataset uploaded and processed!")
 
