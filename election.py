@@ -9,7 +9,7 @@ st.set_page_config(page_title="Election Polling Forecast", layout="wide")
 st.title("🗳 Election Polling Trend Forecasting (LSTM)")
 
 uploaded_file = st.file_uploader(
-    "Upload CSV with party vote shares ", type="csv"
+    "Upload CSV with party vote shares", type="csv"
 )
 
 def create_sequences(data, sequence_length):
@@ -22,7 +22,6 @@ def create_sequences(data, sequence_length):
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 
-    # Optional Date handling
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.sort_values("Date")
@@ -32,9 +31,8 @@ if uploaded_file is not None:
 
     st.dataframe(df.head())
 
-    # Select parties to forecast
     parties = st.multiselect(
-        "Select Parties to Forecast", 
+        "Select Parties to Forecast",
         options=df.columns.tolist() if "Date" not in df.columns else [c for c in df.columns if c != "Date"],
         default=df.columns.tolist() if "Date" not in df.columns else [c for c in df.columns if c != "Date"]
     )
@@ -45,45 +43,39 @@ if uploaded_file is not None:
     predictions_dict = {}
 
     for party in parties:
-        # Clean votes column
         votes = pd.to_numeric(df[party], errors='coerce')
         if votes.isna().sum() > 0:
             st.warning(f"{votes.isna().sum()} missing/invalid values in '{party}' column were forward-filled.")
-        votes = votes.fillna(method='ffill').values.reshape(-1,1)
+        votes = votes.ffill().values.reshape(-1, 1)
 
-        # Scale
         scaler = MinMaxScaler()
         votes_scaled = scaler.fit_transform(votes)
 
-        # Create sequences
         X, y = create_sequences(votes_scaled, sequence_length)
+
         if len(X) == 0:
             st.warning(f"Not enough data for '{party}' to create sequences. Skipping.")
             continue
 
-        # Train-test split
         split = int(len(X) * 0.8)
         X_train, X_test = X[:split], X[split:]
         y_train, y_test = y[:split], y[split:]
 
-        # Build LSTM
         model = Sequential([
-            LSTM(50, input_shape=(sequence_length,1)),
+            LSTM(50, input_shape=(sequence_length, 1)),
             Dense(1)
         ])
         model.compile(optimizer='adam', loss='mse')
-
         model.fit(X_train, y_train, epochs=20, batch_size=8, verbose=0)
 
-        # Forecast future
         last_seq = votes_scaled[-sequence_length:]
         future_preds = []
         for _ in range(forecast_periods):
-            next_pred = model.predict(last_seq.reshape(1,sequence_length,1), verbose=0)
-            future_preds.append(next_pred[0,0])
+            next_pred = model.predict(last_seq.reshape(1, sequence_length, 1), verbose=0)
+            future_preds.append(next_pred[0, 0])
             last_seq = np.append(last_seq[1:], next_pred, axis=0)
 
-        future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1,1))
+        future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1, 1))
         predictions_dict[party] = future_preds.flatten()
 
     if predictions_dict:
@@ -93,5 +85,6 @@ if uploaded_file is not None:
         st.write(forecast_df)
     else:
         st.info("No valid party data available for forecasting.")
+
 else:
     st.info("Upload a CSV file with party vote shares to begin.")
