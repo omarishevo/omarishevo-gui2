@@ -5,11 +5,11 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 
-st.set_page_config(page_title="Election Forecasting", layout="wide")
-st.title("🗳 LSTM Election Forecasting Dashboard (Date Optional)")
+st.set_page_config(page_title="Election Polling Forecast", layout="wide")
+st.title("🗳 Election Polling Trend Forecasting (LSTM)")
 
 uploaded_file = st.file_uploader(
-    "Upload Historical Polling CSV (Columns: Party Vote Shares)", type="csv"
+    "Upload CSV with party vote shares ", type="csv"
 )
 
 def create_sequences(data, sequence_length):
@@ -29,7 +29,7 @@ if uploaded_file is not None:
         st.subheader("Dataset Preview (with Date)")
     else:
         st.subheader("Dataset Preview (No Date column)")
-    
+
     st.dataframe(df.head())
 
     # Select parties to forecast
@@ -45,39 +45,53 @@ if uploaded_file is not None:
     predictions_dict = {}
 
     for party in parties:
-        votes = df[party].values.reshape(-1,1)
+        # Clean votes column
+        votes = pd.to_numeric(df[party], errors='coerce')
+        if votes.isna().sum() > 0:
+            st.warning(f"{votes.isna().sum()} missing/invalid values in '{party}' column were forward-filled.")
+        votes = votes.fillna(method='ffill').values.reshape(-1,1)
+
+        # Scale
         scaler = MinMaxScaler()
         votes_scaled = scaler.fit_transform(votes)
 
+        # Create sequences
         X, y = create_sequences(votes_scaled, sequence_length)
+        if len(X) == 0:
+            st.warning(f"Not enough data for '{party}' to create sequences. Skipping.")
+            continue
 
         # Train-test split
-        split = int(len(X)*0.8)
+        split = int(len(X) * 0.8)
         X_train, X_test = X[:split], X[split:]
         y_train, y_test = y[:split], y[split:]
 
         # Build LSTM
-        model = Sequential()
-        model.add(LSTM(50, input_shape=(sequence_length,1)))
-        model.add(Dense(1))
-        model.compile(optimizer="adam", loss="mse")
+        model = Sequential([
+            LSTM(50, input_shape=(sequence_length,1)),
+            Dense(1)
+        ])
+        model.compile(optimizer='adam', loss='mse')
+
         model.fit(X_train, y_train, epochs=20, batch_size=8, verbose=0)
 
         # Forecast future
         last_seq = votes_scaled[-sequence_length:]
         future_preds = []
         for _ in range(forecast_periods):
-            next_pred = model.predict(last_seq.reshape(1,sequence_length,1))
+            next_pred = model.predict(last_seq.reshape(1,sequence_length,1), verbose=0)
             future_preds.append(next_pred[0,0])
             last_seq = np.append(last_seq[1:], next_pred, axis=0)
 
         future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1,1))
         predictions_dict[party] = future_preds.flatten()
 
-    st.subheader("Forecasted Vote Shares")
-    forecast_df = pd.DataFrame(predictions_dict)
-    st.line_chart(forecast_df)
-    st.write(forecast_df)
-
+    if predictions_dict:
+        st.subheader("Forecasted Vote Shares")
+        forecast_df = pd.DataFrame(predictions_dict)
+        st.line_chart(forecast_df)
+        st.write(forecast_df)
+    else:
+        st.info("No valid party data available for forecasting.")
 else:
     st.info("Upload a CSV file with party vote shares to begin.")
