@@ -1,57 +1,80 @@
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
 import streamlit as st
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
 
-# Use @st.cache_data to cache the function to optimize performance (for Streamlit >=1.0)
-@st.cache_data
-def load_and_process_data(uploaded_file):
-    # Load CSV file directly from uploaded_file
-    df = pd.read_csv(uploaded_file)
+st.set_page_config(page_title="Election Forecasting", layout="wide")
+st.title("🗳 LSTM Election Forecasting Dashboard")
 
-    # Basic Cleaning
-    df = df.drop_duplicates()
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df = df.dropna(subset=['Date'])
+uploaded_file = st.file_uploader(
+    "Upload Historical Polling CSV (Date + Party Vote Shares)", type="csv"
+)
 
-    # Ensure 'Stock Index' exists and convert to category
-    if 'Stock Index' in df.columns:
-        df['Stock Index'] = df['Stock Index'].astype('category')
-
-    # Feature engineering
-    if all(col in df.columns for col in ['Daily High', 'Daily Low', 'Close Price', 'Open Price']):
-        df['Price Range'] = df['Daily High'] - df['Daily Low']
-        df['Price Change'] = df['Close Price'] - df['Open Price']
-
-    # Normalize numerical columns (excluding 'Trading Volume' if it exists)
-    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.difference(['Trading Volume'])
-    scaler = StandardScaler()
-    df_scaled = df.copy()
-    df_scaled[numeric_cols] = scaler.fit_transform(df[numeric_cols])
-
-    return df, df_scaled
-
-# ------------------ Streamlit Layout ------------------
-
-st.title("📈 Finance & Economics Dashboard")
-st.sidebar.header("Upload Your Dataset")
-
-# File uploader
-uploaded_file = st.sidebar.file_uploader("📂 Upload a CSV file", type="csv")
+def create_sequences(data, sequence_length):
+    X, y = [], []
+    for i in range(len(data) - sequence_length):
+        X.append(data[i:i+sequence_length])
+        y.append(data[i+sequence_length])
+    return np.array(X), np.array(y)
 
 if uploaded_file is not None:
-    try:
-        # Load and process the uploaded data
-        df, df_scaled = load_and_process_data(uploaded_file)
-        st.success("✅ Dataset uploaded and processed!")
-
-        # Show raw data
-        st.subheader("🗃️ Raw Data")
+    df = pd.read_csv(uploaded_file)
+    
+    if "Date" not in df.columns:
+        st.error("Dataset must contain 'Date' column.")
+    else:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date")
+        st.subheader("Preview Dataset")
         st.dataframe(df.head())
 
-        # Show processed data
-        st.subheader("📉 Normalized Data")
-        st.dataframe(df_scaled.head())
-    except Exception as e:
-        st.error(f"❌ Error loading the file: {e}")
+        # Select parties to forecast
+        parties = st.multiselect(
+            "Select Parties to Forecast", 
+            options=[c for c in df.columns if c != "Date"],
+            default=[c for c in df.columns if c != "Date"]
+        )
+
+        sequence_length = st.slider("Sequence Length (months/weeks)", 2, 24, 6)
+        forecast_periods = st.slider("Forecast Periods (future steps)", 1, 12, 3)
+
+        predictions_dict = {}
+
+        for party in parties:
+            votes = df[party].values.reshape(-1,1)
+            scaler = MinMaxScaler()
+            votes_scaled = scaler.fit_transform(votes)
+
+            X, y = create_sequences(votes_scaled, sequence_length)
+
+            # Train-test split
+            split = int(len(X)*0.8)
+            X_train, X_test = X[:split], X[split:]
+            y_train, y_test = y[:split], y[split:]
+
+            # Build LSTM
+            model = Sequential()
+            model.add(LSTM(50, input_shape=(sequence_length,1)))
+            model.add(Dense(1))
+            model.compile(optimizer="adam", loss="mse")
+            model.fit(X_train, y_train, epochs=20, batch_size=8, verbose=0)
+
+            # Forecast future
+            last_seq = votes_scaled[-sequence_length:]
+            future_preds = []
+            for _ in range(forecast_periods):
+                next_pred = model.predict(last_seq.reshape(1,sequence_length,1))
+                future_preds.append(next_pred[0,0])
+                last_seq = np.append(last_seq[1:], next_pred, axis=0)
+
+            future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1,1))
+            predictions_dict[party] = future_preds.flatten()
+
+        st.subheader("Forecasted Vote Shares")
+        forecast_df = pd.DataFrame(predictions_dict)
+        st.line_chart(forecast_df)
+        st.write(forecast_df)
 else:
-    st.info("📤 Please upload a CSV file to begin.")
+    st.info("Upload a CSV file with historical polling data to begin.")
