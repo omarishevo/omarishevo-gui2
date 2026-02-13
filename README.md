@@ -1,1 +1,0 @@
-# omarishevo-gui2
